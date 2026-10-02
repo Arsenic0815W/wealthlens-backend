@@ -140,7 +140,7 @@ exports.update = asyncHandler(async (req, res) => {
     holding.priceUpdatedAt = null;
   }
 
-  await holding.save(); // runs schema validators
+  await holding.save();
   res.json(holding);
 });
 

@@ -38,7 +38,6 @@ async function evaluatePurchase({ ticker, assetType, buyPrice, buyDate, currentP
 
   const quotesBeforeBuy = quotes.filter((q) => new Date(q.date) < buyDayEnd);
 
-  // 52-week range for the year leading up to the purchase
   const yearBeforeBuyStart = new Date(buyDateObj.getTime() - 365 * DAY_MS);
   const yearBeforeBuy = quotesBeforeBuy.filter((q) => new Date(q.date) >= yearBeforeBuyStart);
   const week52High =

@@ -2,7 +2,6 @@ const User = require('../models/user');
 const { generateToken, generateTempToken } = require('../utils/jwt');
 const asyncHandler = require('../utils/asyncHandler');
 
-// POST /api/auth/login
 exports.login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
@@ -33,9 +32,7 @@ exports.login = asyncHandler(async (req, res) => {
   });
 });
 
-// GET /api/auth/me
 exports.getMe = asyncHandler(async (req, res) => {
-  // req.user set by auth middleware
   res.json({
     id: req.user._id,
     name: req.user.name,
@@ -45,7 +42,6 @@ exports.getMe = asyncHandler(async (req, res) => {
   });
 });
 
-// PUT /api/auth/me
 exports.updateMe = asyncHandler(async (req, res) => {
   const { name, email } = req.body;
   const updates = {};
@@ -53,8 +49,8 @@ exports.updateMe = asyncHandler(async (req, res) => {
   if (email) updates.email = email.toLowerCase();
 
   const user = await User.findByIdAndUpdate(req.user._id, updates, {
-    new: true, // return the updated document, not the original
-    runValidators: true, // re-run schema validation on update
+    new: true,
+    runValidators: true,
   });
 
   res.json({ id: user._id, name: user.name, email: user.email });

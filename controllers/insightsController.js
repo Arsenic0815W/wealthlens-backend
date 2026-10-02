@@ -5,13 +5,11 @@ const Holding = require('../models/Holding');
 const { isPriceSyncable } = require('../models/Holding');
 const asyncHandler = require('../utils/asyncHandler');
 
-// GET /api/insights/allocation
 exports.getAllocation = asyncHandler(async (req, res) => {
   const insights = await getAllocationInsights(req.user._id);
   res.json(insights);
 });
 
-// POST /api/insights/evaluate/:id
 // Evaluates whether a specific holding's buy price was a good entry point.
 exports.evaluateHolding = asyncHandler(async (req, res) => {
   const holding = await Holding.findOne({ _id: req.params.id, user: req.user._id });
@@ -37,7 +35,6 @@ exports.evaluateHolding = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
-// GET /api/insights/portfolio-history
 exports.getPortfolioHistoryHandler = asyncHandler(async (req, res) => {
   const history = await getPortfolioHistory(req.user._id);
   res.json(history);

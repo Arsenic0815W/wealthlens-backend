@@ -6,7 +6,6 @@ const { buildHistorySeries } = require('../services/portfolioHistory');
 const { normalizeTicker } = require('../services/priceSync');
 const { isPriceSyncable } = require('../models/Holding');
 
-// AMFI: classic 6-field file, with section lines mixed in
 const classic = [
   'Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date',
   '',
@@ -24,7 +23,6 @@ assert.strictEqual(
   'should prefer Direct Growth'
 );
 
-// AMFI: 8-field layout with separate Plan/Option columns
 const wide = [
   'Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date',
   '1;-;-;Axis Bluechip Fund;Regular;Growth;50.5;29-Sep-2026',
@@ -70,7 +68,6 @@ assert.strictEqual(normalizeTicker('ETH-USD', 'CRYPTO'), 'ETH-INR');
 assert.strictEqual(isPriceSyncable('SGB', 'GOLD'), false);
 assert.strictEqual(isPriceSyncable('GOLDBEES.NS', 'GOLD'), true);
 
-// ---- 2FA ----
 process.env.TWO_FACTOR_ENC_KEY = 'ab'.repeat(32);
 process.env.JWT_SECRET = 'selfcheck-secret';
 const { generateSync } = require('otplib');
@@ -79,15 +76,12 @@ const { generateTempToken, generateToken } = require('../utils/jwt');
 const authMiddleware = require('../middleware/auth');
 
 (async () => {
-  // AES-256-GCM round trip; tampering is detected
   const secret = tf.generateSecret();
   const stored = tf.encrypt(secret);
   assert.notStrictEqual(stored, secret);
   assert.strictEqual(tf.decrypt(stored), secret);
   assert.throws(() => tf.decrypt(stored.slice(0, -2) + (stored.endsWith('00') ? '11' : '00')));
 
-  // TOTP: current step accepted, replay of the same step rejected, later step accepted,
-  // ±1 step drift accepted, 2+ steps rejected
   const user = { twoFactorSecret: stored, twoFactorBackupCodes: [], twoFactorLastUsedStep: 0 };
   const now = Date.now();
   const at = (ms) => generateSync({ secret, epoch: Math.floor(ms / 1000) });
@@ -98,7 +92,6 @@ const authMiddleware = require('../middleware/auth');
   assert.strictEqual(tf.checkTotp(secret, at(now - 90000), now), null, '3 steps old rejected');
   assert.strictEqual(tf.checkTotp(secret, at(now + 90000), now), null, '3 steps ahead rejected');
 
-  // Backup code works exactly once
   const { plain, hashes } = await tf.generateBackupCodes();
   assert.strictEqual(plain.length, 8);
   user.twoFactorBackupCodes = hashes;
@@ -106,13 +99,11 @@ const authMiddleware = require('../middleware/auth');
   assert.strictEqual(user.twoFactorBackupCodes.length, 7);
   assert.strictEqual(await tf.consumeCode(user, plain[0]), false, 'backup code reuse rejected');
 
-  // Lockout after 5 failures
   for (let i = 0; i < 5; i++) tf.recordFail('u1');
   assert.strictEqual(tf.isLocked('u1'), true);
   tf.clearFails('u1');
   assert.strictEqual(tf.isLocked('u1'), false);
 
-  // Auth middleware rejects a 2fa-purpose token before touching the DB
   const run = async (token) => {
     let out = {};
     const res = { status: (c) => ({ json: (b) => (out = { status: c, body: b }) }) };
@@ -123,7 +114,6 @@ const authMiddleware = require('../middleware/auth');
   assert.strictEqual(rejected.status, 401, '2fa temp token must be rejected');
   assert.strictEqual(require('jsonwebtoken').decode(generateToken('x')).purpose, undefined);
 
-  // Signup: email validation, 6-digit emailed code, signup-purpose token can't open normal routes
   const { isValidEmail, newCode } = require('../utils/emailCode');
   assert.strictEqual(isValidEmail('a@b.co'), true);
   for (const bad of ['random', 'a@b', 'a b@c.com', '@x.com', 'a@b.c']) assert.strictEqual(isValidEmail(bad), false, bad);

@@ -40,7 +40,7 @@ const normalizeBackup = (c) => String(c).toLowerCase().replace(/[\s-]/g, '');
 
 async function generateBackupCodes() {
   const plain = Array.from({ length: 8 }, () => {
-    const c = crypto.randomBytes(5).toString('hex'); // 10 chars
+    const c = crypto.randomBytes(5).toString('hex');
     return `${c.slice(0, 5)}-${c.slice(5)}`;
   });
   const hashes = await Promise.all(plain.map((c) => bcrypt.hash(normalizeBackup(c), 8)));

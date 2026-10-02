@@ -3,7 +3,7 @@ const router = express.Router();
 const { create, getAll, getOne, update, remove } = require('../controllers/holdingController');
 const auth = require('../middleware/auth');
 
-router.use(auth); // every holdings route requires a logged-in user
+router.use(auth);
 
 router.post('/', create);
 router.get('/', getAll);

@@ -18,7 +18,6 @@ async function connectDB() {
       });
       console.log('Connected to MongoDB');
 
-      // Handle disconnects after initial connection
       mongoose.connection.on('disconnected', () => {
         console.warn('MongoDB disconnected — will retry connection...');
       });

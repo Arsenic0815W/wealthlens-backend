@@ -1,5 +1,3 @@
-// Global error handler — catches any unhandled errors in routes/controllers
-// and returns a clean JSON response instead of crashing or hanging.
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
   console.error('Unhandled error:', err.message);
@@ -9,7 +7,6 @@ function errorHandler(err, req, res, next) {
     return res.status(400).json({ error: 'Request body is not valid JSON' });
   }
 
-  // Mongoose / MongoDB errors
   if (err.name === 'MongoNetworkError' || err.name === 'MongooseServerSelectionError') {
     return res.status(503).json({ error: 'Database unavailable. Please try again later.' });
   }
