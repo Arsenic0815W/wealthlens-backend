@@ -7,11 +7,18 @@ function getTransport() {
   if (!SMTP_USER || !SMTP_PASS) {
     throw new Error('SMTP_USER and SMTP_PASS must be set (Gmail address + Google App Password)');
   }
-  return (transport ||= nodemailer.createTransport({ service: 'gmail', auth: { user: SMTP_USER, pass: SMTP_PASS } }));
+  return (transport ||= nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    // a slow or blocked SMTP must not hang the signup request
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+  }));
 }
 
-// Render's free tier blocks outbound SMTP ports, so with BREVO_API_KEY set we
-// send over HTTPS instead. Without it, local dev keeps using SMTP.
+// Some hosts block outbound SMTP ports, so with BREVO_API_KEY set we send
+// over HTTPS instead. Without it, mail goes over SMTP.
 async function sendViaBrevo({ from, to, subject, text }) {
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
