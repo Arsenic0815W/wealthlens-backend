@@ -165,6 +165,16 @@ const authMiddleware = require('../middleware/auth');
   const upd = await call(holdings.update, { params: { id: 'x' }, body: { buyDate: '2999-01-01' }, user: { _id: 'u' } });
   assert.strictEqual(upd.status, 400, 'future buyDate rejected on update');
 
+  // fetchPrice falls back to chart() when quote() is rate-limited.
+  const yf = require('../utils/yahooFinance');
+  yf.quote = async () => { throw new Error('Failed to get crumb'); };
+  yf.chart = async () => ({ meta: { regularMarketPrice: 123 }, quotes: [] });
+  assert.strictEqual(await priceSync.fetchPrice('TCS.NS', 'STOCK'), 123, 'chart fallback price');
+  yf.chart = async () => { throw new Error('boom'); };
+  const quietErr0 = console.error; console.error = () => {};
+  try { assert.strictEqual(await priceSync.fetchPrice('TCS.NS', 'STOCK'), null, 'both failing -> null'); }
+  finally { console.error = quietErr0; }
+
   // 3. No signals -> null verdict; a Yahoo failure -> 502 with the ticker.
   const yahooFinance = require('../utils/yahooFinance');
   const { evaluatePurchase } = require('../services/purchaseEvaluator');

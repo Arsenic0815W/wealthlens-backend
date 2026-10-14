@@ -13,15 +13,30 @@ function normalizeTicker(ticker, assetType) {
   return ticker;
 }
 
+// chart() needs no crumb, so it still works when Yahoo rate-limits quote()
+// (429 "Failed to get crumb") on shared hosting IPs.
+async function chartPrice(symbol) {
+  const result = await yahooFinance.chart(symbol, {
+    period1: new Date(Date.now() - 7 * 24 * 3600 * 1000),
+    interval: '1d',
+  });
+  const closes = (result?.quotes || []).filter((q) => q.close != null);
+  return result?.meta?.regularMarketPrice ?? closes[closes.length - 1]?.close ?? null;
+}
+
 // Returns null on failure so one bad ticker doesn't crash a batch sync.
 async function fetchPrice(ticker, assetType) {
+  const symbol = normalizeTicker(ticker, assetType);
   try {
-    const symbol = normalizeTicker(ticker, assetType);
     const quote = await yahooFinance.quote(symbol);
     return quote?.regularMarketPrice ?? null;
   } catch (err) {
-    console.error(`Price fetch failed for ${ticker} (${assetType}):`, err.message);
-    return null;
+    try {
+      return await chartPrice(symbol);
+    } catch (err2) {
+      console.error(`Price fetch failed for ${ticker} (${assetType}):`, err.message, '| fallback:', err2.message);
+      return null;
+    }
   }
 }
 
