@@ -29,18 +29,22 @@ app.use((req, res) => res.status(404).json({ error: 'Route not found' }));
 // Global error handler — must be last
 app.use(require('./middleware/errorHandler'));
 
-const PORT = process.env.PORT || 5000;
+module.exports = app; // tests mount the app without listening or connecting
 
-// Start the server immediately — don't wait for MongoDB
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+if (require.main === module) {
+  const PORT = process.env.PORT || 5000;
 
-// Connect to MongoDB in the background (db.js retries until it succeeds).
-// The cron is scheduled before the catch-up runs, so a failing catch-up
-// can't prevent it; the .catch keeps a failure from becoming an unhandled
-// rejection, which would exit Node.
-connectDB()
-  .then(async () => {
-    scheduleDailySync();
-    await checkAndRunCatchUpSync();
-  })
-  .catch((err) => console.error('Startup price sync failed:', err.message));
+  // Start the server immediately — don't wait for MongoDB
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+  // Connect to MongoDB in the background (db.js retries until it succeeds).
+  // The cron is scheduled before the catch-up runs, so a failing catch-up
+  // can't prevent it; the .catch keeps a failure from becoming an unhandled
+  // rejection, which would exit Node.
+  connectDB()
+    .then(async () => {
+      scheduleDailySync();
+      await checkAndRunCatchUpSync();
+    })
+    .catch((err) => console.error('Startup price sync failed:', err.message));
+}

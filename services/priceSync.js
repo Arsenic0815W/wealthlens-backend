@@ -29,7 +29,8 @@ async function fetchPrice(ticker, assetType) {
 // `filter` narrows the run (e.g. { user: id } for a user-triggered sync).
 async function syncAllPrices(filter = {}) {
   const holdings = (
-    await Holding.find({ ...filter, assetType: { $in: PRICE_SYNCABLE_TYPES } })
+    // filter last so it can narrow assetType (e.g. CRYPTO-only on market holidays)
+    await Holding.find({ assetType: { $in: PRICE_SYNCABLE_TYPES }, ...filter })
   ).filter((h) => isPriceSyncable(h.ticker, h.assetType));
 
   if (holdings.length === 0) {

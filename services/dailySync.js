@@ -22,7 +22,11 @@ async function runFullSync({ userId } = {}) {
   console.log(`Market sync: ${market.updated} updated, ${market.failed} failed.`);
   console.log(`Mutual fund sync: ${mutualFunds.updated} updated, ${mutualFunds.failed} failed.`);
 
-  if (!userId) {
+  // A total failure (nothing updated, something failed — e.g. Yahoo/AMFI down)
+  // isn't recorded, so the startup catch-up retries it.
+  const totalFail =
+    market.updated + mutualFunds.updated === 0 && market.failed + mutualFunds.failed > 0;
+  if (!userId && !totalFail) {
     await SyncLog.findOneAndUpdate(
       { key: SYNC_KEY },
       { lastRunDate: toISTDateString() },
@@ -56,16 +60,19 @@ async function checkAndRunCatchUpSync() {
 
 function scheduleDailySync() {
   cron.schedule(
-    '0 16 * * 1-5',
+    '0 16 * * *',
     async () => {
       // node-cron doesn't catch async errors — an escaped rejection here
       // would be unhandled and can take the process down.
       try {
         const status = getMarketStatus();
         if (!status.isOpen) {
+          // Crypto trades every day, so it still syncs when NSE is closed.
           console.log(
-            `Market closed today (${status.holidayName || 'weekend'}) — skipping scheduled sync.`
+            `Market closed today (${status.holidayName || 'weekend'}) — syncing crypto only.`
           );
+          const crypto = await syncAllPrices({ assetType: 'CRYPTO' });
+          console.log(`Crypto sync: ${crypto.updated} updated, ${crypto.failed} failed.`);
           return;
         }
         console.log('Running scheduled daily price sync...');
@@ -77,7 +84,7 @@ function scheduleDailySync() {
     { timezone: 'Asia/Kolkata' }
   );
   console.log(
-    'Daily price sync scheduled for 4:00 PM IST on trading days (plus startup catch-up if missed).'
+    'Daily price sync scheduled for 4:00 PM IST (crypto only on non-trading days; plus startup catch-up if missed).'
   );
 }
 

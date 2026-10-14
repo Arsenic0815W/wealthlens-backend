@@ -108,7 +108,11 @@ async function evaluatePurchase({ ticker, assetType, buyPrice, buyDate, currentP
   }
 
   score = Math.min(Math.max(score, -100), 100);
-  const verdict = score >= 20 ? 'Good Entry' : score <= -20 ? 'Overpaid' : 'Fair Entry';
+  // With no signal at all the score is a meaningless 0 — give no verdict rather than "Fair".
+  const noSignals = rangePosition == null && vsMa50Pct == null && vsMa200Pct == null;
+  const verdict = noSignals
+    ? null
+    : score >= 20 ? 'Good Entry' : score <= -20 ? 'Overpaid' : 'Fair Entry';
 
   const nextSteps = generateNextSteps({ verdict, unrealizedPnlPct, vsMa200Pct });
 

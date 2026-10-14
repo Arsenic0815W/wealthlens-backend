@@ -46,17 +46,15 @@ async function getAllocationInsights(userId) {
     }))
     .sort((a, b) => b.value - a.value);
 
-  const byHolding = holdings
-    .map((h) => {
-      const value = currentValueOf(h);
-      return {
-        id: h._id,
-        ticker: h.ticker,
-        assetType: h.assetType,
-        value,
-        percent: totalValue > 0 ? (value / totalValue) * 100 : 0,
-      };
-    })
+  // Several buys of the same asset are one position for concentration purposes.
+  const positionMap = {};
+  for (const h of holdings) {
+    const key = `${h.ticker}|${h.assetType}`;
+    positionMap[key] ||= { id: h._id, ticker: h.ticker, assetType: h.assetType, value: 0 };
+    positionMap[key].value += currentValueOf(h);
+  }
+  const byHolding = Object.values(positionMap)
+    .map((p) => ({ ...p, percent: totalValue > 0 ? (p.value / totalValue) * 100 : 0 }))
     .sort((a, b) => b.value - a.value);
 
   const insights = [];
@@ -90,9 +88,9 @@ async function getAllocationInsights(userId) {
     );
   }
 
-  if (holdings.length <= 2) {
+  if (byHolding.length <= 2) {
     insights.push(
-      `You only have ${holdings.length} position${holdings.length === 1 ? '' : 's'} tracked so far — insights will get more useful as you add more.`
+      `You only have ${byHolding.length} position${byHolding.length === 1 ? '' : 's'} tracked so far — insights will get more useful as you add more.`
     );
   }
 

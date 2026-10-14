@@ -122,5 +122,69 @@ const authMiddleware = require('../middleware/auth');
   assert.strictEqual(await require('bcryptjs').compare(ec.code, ec.hash), true);
   assert.strictEqual((await run(generateTempToken('507f1f77bcf86cd799439011', 'signup-2fa'))).status, 401);
 
+  // Below: DB models and Yahoo are stubbed, so nothing touches the network.
+  const Holding = require('../models/Holding');
+  const call = async (handler, req) => {
+    let out = { status: 200 };
+    const res = {
+      status: (c) => ((out.status = c), res),
+      json: (b) => (out.body = b),
+    };
+    await handler(req, res, (e) => { throw e; });
+    return out;
+  };
+
+  // 1. A totally failed global sync must not write SyncLog (so catch-up retries).
+  const priceSync = require('../services/priceSync');
+  const mfNavSync = require('../services/mfNavSync');
+  const SyncLog = require('../models/SyncLog');
+  let mkt, mf, logged;
+  priceSync.syncAllPrices = async () => mkt;
+  mfNavSync.syncMutualFundPrices = async () => mf;
+  SyncLog.findOneAndUpdate = async () => (logged = true);
+  const { runFullSync } = require('../services/dailySync'); // after stubbing: it destructures on load
+  const sync = async (m, f) => { mkt = m; mf = f; logged = false; await runFullSync(); return logged; };
+  const quietLog = console.log; console.log = () => {};
+  try {
+    assert.strictEqual(await sync({ updated: 0, failed: 3 }, { updated: 0, failed: 2 }), false, 'total failure not logged');
+    assert.strictEqual(await sync({ updated: 0, failed: 0 }, { updated: 0, failed: 2 }), false, 'empty + failed not logged');
+    assert.strictEqual(await sync({ updated: 1, failed: 3 }, { updated: 0, failed: 2 }), true, 'partial success logged');
+    assert.strictEqual(await sync({ updated: 0, failed: 0 }, { updated: 0, failed: 0 }), true, 'nothing to sync logged');
+  } finally { console.log = quietLog; }
+
+  // 2. buyPrice 0 is allowed; negative, missing, and future-dated buys are not.
+  const holdings = require('../controllers/holdingController');
+  Holding.create = async (d) => d;
+  const base = { ticker: 'TCS', assetType: 'STOCK', quantity: 1, buyPrice: 0, buyDate: '2026-01-01', confirmPrice: true };
+  const create = (over) => call(holdings.create, { body: { ...base, ...over }, user: { _id: 'u' } });
+  assert.strictEqual((await create({})).status, 201, 'buyPrice 0 accepted');
+  assert.strictEqual((await create({ buyPrice: -1 })).status, 400);
+  assert.strictEqual((await create({ buyPrice: '' })).status, 400);
+  assert.strictEqual((await create({ buyPrice: undefined })).status, 400);
+  assert.strictEqual((await create({ buyDate: '2999-01-01' })).status, 400, 'future buyDate rejected');
+  const upd = await call(holdings.update, { params: { id: 'x' }, body: { buyDate: '2999-01-01' }, user: { _id: 'u' } });
+  assert.strictEqual(upd.status, 400, 'future buyDate rejected on update');
+
+  // 3. No signals -> null verdict; a Yahoo failure -> 502 with the ticker.
+  const yahooFinance = require('../utils/yahooFinance');
+  const { evaluatePurchase } = require('../services/purchaseEvaluator');
+  yahooFinance.chart = async () => ({ quotes: [{ date: new Date('2026-01-01T04:00:00Z'), close: 100 }] });
+  const ev = await evaluatePurchase({ ticker: 'NEW.NS', assetType: 'STOCK', buyPrice: 100, buyDate: '2026-01-01' });
+  assert.strictEqual(ev.verdict, null, 'no 52w/MA signal -> no verdict');
+  yahooFinance.chart = async () => { throw new Error('boom'); };
+  Holding.findOne = async () => ({ ticker: 'TCS.NS', assetType: 'STOCK', buyPrice: 100, buyDate: new Date('2026-01-01') });
+  const quietErr = console.error; console.error = () => {};
+  let ev502;
+  try { ev502 = await call(require('../controllers/insightsController').evaluateHolding, { params: { id: 'x' }, user: { _id: 'u' } }); }
+  finally { console.error = quietErr; }
+  assert.deepStrictEqual(ev502, { status: 502, body: { error: "Couldn't get price history for TCS.NS" } });
+
+  // 4. Two 20% lots of one ticker are one 40% position -> concentration warning.
+  const lot = (ticker) => ({ _id: ticker, ticker, assetType: 'STOCK', quantity: 1, buyPrice: 20, currentPrice: null });
+  Holding.find = async () => [lot('TCS.NS'), lot('TCS.NS'), lot('A.NS'), lot('B.NS'), lot('C.NS')];
+  const alloc = await require('../services/allocationInsights').getAllocationInsights('u');
+  assert.strictEqual(alloc.byHolding.length, 4);
+  assert.ok(alloc.insights.some((s) => s.startsWith('TCS.NS makes up 40%')), 'grouped concentration warning');
+
   console.log('selfcheck passed');
 })().catch((e) => { console.error(e); process.exit(1); });

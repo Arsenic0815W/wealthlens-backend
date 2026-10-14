@@ -2,6 +2,14 @@ const Holding = require('../models/Holding');
 const { VALID_ASSET_TYPES } = require('../models/Holding');
 const { validateBuyPrice } = require('../services/priceSync');
 const asyncHandler = require('../utils/asyncHandler');
+const { toISTDateString } = require('../utils/dates');
+
+// Compared as IST calendar days: a "today" buyDate is stored as midnight UTC,
+// which is still in the future for IST users before 5:30 AM.
+const isFutureDate = (d) => {
+  const t = new Date(d);
+  return !isNaN(t) && toISTDateString(t) > toISTDateString();
+};
 
 // Stocks/ETFs entered by typing a raw symbol instead of picking from
 // autocomplete (which already appends the right suffix) can end up
@@ -21,7 +29,15 @@ function normalizeTickerForStorage(ticker, assetType) {
 exports.create = asyncHandler(async (req, res) => {
   const { ticker, assetType, quantity, buyPrice, buyDate, note, confirmPrice } = req.body;
 
-  if (!String(ticker ?? '').trim() || !assetType || !quantity || !buyPrice || !buyDate) {
+  if (
+    !String(ticker ?? '').trim() ||
+    !assetType ||
+    !quantity ||
+    buyPrice === undefined ||
+    buyPrice === null ||
+    buyPrice === '' ||
+    !buyDate
+  ) {
     return res
       .status(400)
       .json({ error: 'ticker, assetType, quantity, buyPrice, and buyDate are required' });
@@ -36,6 +52,9 @@ exports.create = asyncHandler(async (req, res) => {
   }
   if (Number(buyPrice) < 0) {
     return res.status(400).json({ error: 'buyPrice cannot be negative' });
+  }
+  if (isFutureDate(buyDate)) {
+    return res.status(400).json({ error: 'buyDate cannot be in the future' });
   }
 
   const normalizedTicker = normalizeTickerForStorage(ticker, assetType);
@@ -97,6 +116,9 @@ exports.update = asyncHandler(async (req, res) => {
   }
   if (buyPrice !== undefined && Number(buyPrice) < 0) {
     return res.status(400).json({ error: 'buyPrice cannot be negative' });
+  }
+  if (buyDate !== undefined && isFutureDate(buyDate)) {
+    return res.status(400).json({ error: 'buyDate cannot be in the future' });
   }
 
   const holding = await Holding.findOne({ _id: req.params.id, user: req.user._id });

@@ -1,6 +1,7 @@
 const User = require('../models/user');
 const { generateToken, generateTempToken } = require('../utils/jwt');
 const asyncHandler = require('../utils/asyncHandler');
+const tf = require('../utils/twoFactor');
 
 exports.login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
@@ -9,16 +10,20 @@ exports.login = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'email and password are required' });
   }
 
-  // .select('+password') needed since the schema excludes it by default
-  const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid email or password' });
+  // Keyed on email (prefixed so it can't collide with the user-id keys the 2FA
+  // routes use); unknown emails count too, so lockout doesn't reveal which exist.
+  const failKey = `login:${String(email).toLowerCase()}`;
+  if (tf.isLocked(failKey)) {
+    return res.status(429).json({ error: 'Too many failed attempts. Try again in 10 minutes.' });
   }
 
-  const isMatch = await user.comparePassword(password);
-  if (!isMatch) {
+  // .select('+password') needed since the schema excludes it by default
+  const user = await User.findOne({ email: String(email).toLowerCase() }).select('+password');
+  if (!user || !(await user.comparePassword(password))) {
+    tf.recordFail(failKey);
     return res.status(401).json({ error: 'Invalid email or password' });
   }
+  tf.clearFails(failKey);
 
   if (user.twoFactorEnabled) {
     return res.json({ twoFactorRequired: true, tempToken: generateTempToken(user._id) });

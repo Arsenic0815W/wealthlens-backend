@@ -24,13 +24,20 @@ exports.evaluateHolding = asyncHandler(async (req, res) => {
     });
   }
 
-  const result = await evaluatePurchase({
-    ticker: holding.ticker,
-    assetType: holding.assetType,
-    buyPrice: Number(holding.buyPrice),
-    buyDate: holding.buyDate,
-    currentPrice: holding.currentPrice,
-  });
+  let result;
+  try {
+    result = await evaluatePurchase({
+      ticker: holding.ticker,
+      assetType: holding.assetType,
+      buyPrice: Number(holding.buyPrice),
+      buyDate: holding.buyDate,
+      currentPrice: holding.currentPrice,
+    });
+  } catch (err) {
+    // Yahoo is the upstream here — its failure is a bad gateway, not our 500.
+    console.error(`evaluatePurchase failed for ${holding.ticker}:`, err.message);
+    return res.status(502).json({ error: `Couldn't get price history for ${holding.ticker}` });
+  }
 
   res.json(result);
 });
