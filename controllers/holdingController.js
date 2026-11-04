@@ -3,6 +3,19 @@ const { VALID_ASSET_TYPES } = require('../models/Holding');
 const { validateBuyPrice } = require('../services/priceSync');
 const asyncHandler = require('../utils/asyncHandler');
 const { toISTDateString } = require('../utils/dates');
+const { isStr, isFiniteNumber } = require('../utils/validate');
+
+const TICKER_MAX = 40;
+// Shape checks shared by create and update. Returns an error message or null.
+function fieldProblem({ ticker, quantity, buyPrice, note }) {
+  if (ticker !== undefined && (!isStr(ticker) || ticker.trim().length > TICKER_MAX)) {
+    return `ticker must be text of at most ${TICKER_MAX} characters`;
+  }
+  if (quantity !== undefined && !isFiniteNumber(quantity)) return 'quantity must be a number';
+  if (buyPrice !== undefined && !isFiniteNumber(buyPrice)) return 'buyPrice must be a number';
+  if (note !== undefined && note !== null && !isStr(note)) return 'note must be text';
+  return null;
+}
 
 // Compared as IST calendar days: a "today" buyDate is stored as midnight UTC,
 // which is still in the future for IST users before 5:30 AM.
@@ -47,6 +60,8 @@ exports.create = asyncHandler(async (req, res) => {
       .status(400)
       .json({ error: `assetType must be one of: ${VALID_ASSET_TYPES.join(', ')}` });
   }
+  const createProblem = fieldProblem({ ticker, quantity, buyPrice, note });
+  if (createProblem) return res.status(400).json({ error: createProblem });
   if (Number(quantity) <= 0) {
     return res.status(400).json({ error: 'quantity must be greater than 0' });
   }
@@ -106,6 +121,8 @@ exports.update = asyncHandler(async (req, res) => {
   if (ticker !== undefined && !String(ticker).trim()) {
     return res.status(400).json({ error: 'ticker cannot be empty' });
   }
+  const updateProblem = fieldProblem({ ticker, quantity, buyPrice, note });
+  if (updateProblem) return res.status(400).json({ error: updateProblem });
   if (assetType && !VALID_ASSET_TYPES.includes(assetType)) {
     return res
       .status(400)

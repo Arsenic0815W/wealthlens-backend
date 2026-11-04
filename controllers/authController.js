@@ -2,11 +2,13 @@ const User = require('../models/user');
 const { generateToken, generateTempToken } = require('../utils/jwt');
 const asyncHandler = require('../utils/asyncHandler');
 const tf = require('../utils/twoFactor');
+const { isStr, nameProblem } = require('../utils/validate');
+const { isValidEmail } = require('../utils/emailCode');
 
 exports.login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  if (!email || !password) {
+  if (!isStr(email) || !isStr(password) || !email || !password) {
     return res.status(400).json({ error: 'email and password are required' });
   }
 
@@ -50,8 +52,16 @@ exports.getMe = asyncHandler(async (req, res) => {
 exports.updateMe = asyncHandler(async (req, res) => {
   const { name, email } = req.body;
   const updates = {};
-  if (name) updates.name = name;
-  if (email) updates.email = email.toLowerCase();
+  if (name !== undefined) {
+    const problem = nameProblem(name);
+    if (problem) return res.status(400).json({ error: problem });
+    updates.name = name.trim();
+  }
+  if (email !== undefined) {
+    const normalized = isStr(email) ? email.trim().toLowerCase() : '';
+    if (!isValidEmail(normalized)) return res.status(400).json({ error: 'Enter a valid email address' });
+    updates.email = normalized;
+  }
 
   const user = await User.findByIdAndUpdate(req.user._id, updates, {
     new: true,

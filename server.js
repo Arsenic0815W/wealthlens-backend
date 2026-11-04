@@ -1,12 +1,23 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const { apiLimiter } = require('./middleware/rateLimit');
 // Paths match the on-disk (and git-tracked) casing exactly: Linux hosts are
 // case-sensitive, so './config/db' or './routes/authRoutes' would crash there.
 const connectDB = require('./Config/db');
 const { checkAndRunCatchUpSync, scheduleDailySync } = require('./services/dailySync');
 
 const app = express();
+
+// Render puts exactly one proxy in front of the app. Trusting that one hop makes
+// req.ip the real client address (needed for per-IP rate limits) without letting
+// clients spoof it via X-Forwarded-For. Override with TRUST_PROXY_HOPS if that changes.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
+
+// Security headers (nosniff, frame denial, HSTS, no X-Powered-By, ...).
+// The API only returns JSON, so helmet's defaults are safe as-is.
+app.use(helmet());
 
 // FRONTEND_URL: comma-separated allowed origins, no trailing slash.
 // Unset falls back to local Vite ports, so a missing prod value fails closed.
@@ -15,8 +26,9 @@ const origins = (process.env.FRONTEND_URL || 'http://localhost:5173,http://local
   .map((o) => o.trim().replace(/\/+$/, ''))
   .filter(Boolean);
 app.use(cors({ origin: origins }));
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 
+app.use('/api', apiLimiter);
 app.use('/api/auth', require('./routes/authroutes'));
 app.use('/api/holdings', require('./routes/holdingroutes'));
 app.use('/api/prices', require('./routes/priceRoutes'));

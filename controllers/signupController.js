@@ -7,6 +7,7 @@ const { generateToken, generateTempToken, verifyToken } = require('../utils/jwt'
 const { isValidEmail, newCode } = require('../utils/emailCode');
 const { sendVerificationCode } = require('../utils/mailer');
 const tf = require('../utils/twoFactor');
+const { passwordProblem, nameProblem } = require('../utils/validate');
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const FLOW_TTL_MS = 30 * 60 * 1000; // after the email is verified, time to scan the QR
@@ -22,8 +23,11 @@ exports.start = asyncHandler(async (req, res) => {
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'name, email, and password are required' });
   }
+  const badName = nameProblem(name);
+  if (badName) return res.status(400).json({ error: badName });
   if (!isValidEmail(email)) return res.status(400).json({ error: 'Enter a valid email address' });
-  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  const badPassword = passwordProblem(password);
+  if (badPassword) return res.status(400).json({ error: badPassword });
   if (await User.exists({ email })) {
     return res.status(409).json({ error: 'An account with this email already exists' });
   }
